@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Pelacak kalori harian dengan makanan Indonesia, target kalori, makro, dan grafik 7 hari.">
+<title>Piringku</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:light}
+[hidden]{display:none!important}
+
+/* Layout: satu kolom 680px. Tanggal di atas, lalu ringkasan (cincin kalori + makro), catatan per waktu makan, grafik 7 hari, dan target. Hijau pandan untuk progres, merah sambal untuk melebihi target. */
+:root{
+  --bg:#F2F5F0; --surface:#FFFFFF; --surface-2:#E7EEE5; --fg:#16231B; --muted:#58695F; --line:#D3DDD2;
+  --accent:#1D6A49; --accent-fg:#FFFFFF; --warn:#B8321F;
+  --prot:#2E7AA3; --carb:#B7791A; --fat:#A8476F;
+  --f-display:'Bricolage Grotesque',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-body:'Instrument Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1612; --surface:#16211B; --surface-2:#1D2B23; --fg:#E5EEE8; --muted:#92A599; --line:#29382F;
+    --accent:#62C79A; --accent-fg:#08231A; --warn:#FF8F7D;
+    --prot:#6DB4DE; --carb:#E2A94A; --fat:#E08AB0;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1612; --surface:#16211B; --surface-2:#1D2B23; --fg:#E5EEE8; --muted:#92A599; --line:#29382F;
+  --accent:#62C79A; --accent-fg:#08231A; --warn:#FF8F7D;
+  --prot:#6DB4DE; --carb:#E2A94A; --fat:#E08AB0;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 var(--f-body);
+  font-variant-numeric:tabular-nums;
+  padding-block:20px 72px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+button,input,select{font:inherit; color:inherit}
+button{cursor:pointer}
+.app{max-width:680px; margin:0 auto; display:flex; flex-direction:column; gap:16px}
+.muted{color:var(--muted)}
+
+/* header */
+.top{display:flex; flex-direction:column; gap:12px}
+.brand{display:flex; align-items:baseline; justify-content:space-between; gap:4px 12px; flex-wrap:wrap}
+h1{font:700 30px/1.1 var(--f-display); letter-spacing:-.02em; margin:0}
+.status{font-size:12px; color:var(--muted); display:inline-flex; align-items:center; gap:6px}
+.status::before{content:""; width:7px; height:7px; border-radius:50%; background:var(--muted)}
+.status[data-mode="account"]::before{background:var(--accent)}
+.datenav{display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:6px}
+.datenav button{width:42px; height:42px; border-radius:10px; border:0; background:transparent; display:grid; place-items:center; flex:none}
+.datenav button:hover:not(:disabled){background:var(--surface-2)}
+.datenav button:disabled{opacity:.3; cursor:default}
+.dlabel{flex:1; min-width:0; text-align:center; display:flex; flex-direction:column; line-height:1.25}
+.dlabel strong{font:600 17px var(--f-display)}
+.dlabel span{font-size:12px; color:var(--muted)}
+
+/* cards */
+.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:16px}
+.sec-h{font:600 17px/1.3 var(--f-display); margin:0}
+
+/* summary */
+.sum{display:grid; grid-template-columns:168px 1fr; gap:20px; align-items:center}
+.ring{position:relative; width:168px; height:168px; justify-self:center}
+.ring svg{display:block; width:100%; height:100%}
+.rbg{stroke:var(--surface-2)}
+.rfg{stroke:var(--accent)}
+.rfg.over{stroke:var(--warn)}
+.ring-c{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:0 24px}
+.ring-c strong{font:700 34px/1.05 var(--f-display); letter-spacing:-.02em}
+.ring-c strong.over{color:var(--warn)}
+.ring-c span{font-size:12px; color:var(--muted); line-height:1.3; margin-top:2px}
+.stats{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.stat{display:flex; flex-direction:column; min-width:0}
+.stat small{font-size:12px; color:var(--muted)}
+.stat b{font:600 22px/1.2 var(--f-display)}
+.stat b i{font:400 13px var(--f-body); font-style:normal; color:var(--muted)}
+.linkbtn{background:none; border:0; padding:0; color:var(--accent); font-size:13px; font-weight:600; text-align:left; text-decoration:underline; text-underline-offset:3px; width:max-content}
+.macros-box{grid-column:1/-1; border-top:1px solid var(--line); padding-top:14px; display:flex; flex-direction:column; gap:10px}
+.mrow{display:grid; grid-template-columns:64px 1fr 92px; gap:10px; align-items:center; font-size:14px}
+.mbar{height:8px; border-radius:99px; background:var(--surface-2); overflow:hidden}
+.mbar i{display:block; height:100%; border-radius:99px}
+.mval{text-align:right; font-weight:600}
+.mval em{font-style:normal; font-weight:400; color:var(--muted); margin-left:6px; font-size:12px}
+.mnote{font-size:12px; color:var(--muted); margin:0}
+
+/* meals */
+.meal{padding:14px 0; border-top:1px solid var(--line)}
+.meal:first-child{padding-top:0; border-top:0}
+.meal:last-child{padding-bottom:0}
+.meal-h{display:flex; align-items:center; gap:10px}
+.meal-h h3{font:600 16px var(--f-display); margin:0}
+.meal-k{font-size:13px; color:var(--muted); flex:1}
+.add{border:1px solid var(--line); background:transparent; color:var(--accent); border-radius:99px; padding:5px 12px; font-size:13px; font-weight:600}
+.add:hover{background:var(--surface-2)}
+.entries{list-style:none; margin:6px 0 0; padding:0}
+.entries li{display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; align-items:center; padding:7px 0}
+.en{min-width:0; overflow-wrap:anywhere}
+.en small{display:block; font-size:12px; color:var(--muted)}
+.ek{font-weight:600; text-align:right}
+.ek small{font-weight:400; color:var(--muted); margin-left:3px; font-size:12px}
+.del{width:32px; height:32px; border-radius:8px; border:0; background:transparent; color:var(--muted); display:grid; place-items:center}
+.del:hover{background:var(--surface-2); color:var(--warn)}
+.empty{margin:6px 0 0; font-size:13px; color:var(--muted)}
+
+/* add form */
+.addform{margin-top:12px; padding:14px; background:var(--surface-2); border-radius:12px; display:flex; flex-direction:column; gap:12px}
+.fgrid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.fgrid3{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:8px}
+.wide{grid-column:1/-1}
+.fld{display:flex; flex-direction:column; gap:4px; font-size:12px; font-weight:500; color:var(--muted); min-width:0}
+.fld input,.fld select{width:100%; height:42px; border:1px solid var(--line); background:var(--surface); border-radius:10px; padding:0 12px; font-size:16px; color:var(--fg)}
+.fld input::placeholder{color:var(--muted); opacity:.7}
+.addform summary,#settings summary{cursor:pointer}
+.addform summary{font-size:13px; font-weight:500}
+.picks-h{font-size:12px; font-weight:500; color:var(--muted)}
+.picks{display:flex; flex-wrap:wrap; gap:6px; max-height:138px; overflow-y:auto; padding:2px}
+.chip{border:1px solid var(--line); background:var(--surface); border-radius:99px; padding:6px 11px; font-size:13px; display:inline-flex; gap:6px; align-items:baseline; text-align:left}
+.chip:hover{border-color:var(--accent)}
+.chip b{font-weight:600; color:var(--muted); font-size:12px}
+.formerr{margin:0; font-size:13px; color:var(--warn); font-weight:500}
+.factions{display:flex; gap:8px; flex-wrap:wrap}
+.btn{height:42px; padding:0 16px; border-radius:10px; border:1px solid var(--line); background:var(--surface); font-weight:600}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent); color:var(--accent-fg); border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.06)}
+
+/* week */
+.week-h{display:flex; justify-content:space-between; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:8px}
+.week-h span{font-size:13px; color:var(--muted)}
+.chart-wrap{overflow-x:auto}
+.chart-wrap svg{display:block; width:100%; height:auto; min-width:300px}
+.ax{fill:var(--muted); font:11px var(--f-body)}
+.ax.sel{fill:var(--fg); font-weight:600}
+.val{fill:var(--fg); font:600 10px var(--f-body)}
+.gl{stroke:var(--fg); stroke-opacity:.4; stroke-dasharray:4 4; fill:none}
+.glt{fill:var(--muted); font:11px var(--f-body); paint-order:stroke; stroke:var(--surface); stroke-width:3px}
+.base{stroke:var(--line); fill:none}
+.bar{fill:var(--accent)}
+.bar.over{fill:var(--warn)}
+.col{cursor:pointer}
+.col:focus-visible{outline:none}
+.col:focus-visible .bar,.col:focus-visible .nil{stroke:var(--fg); stroke-width:2}
+.nil{fill:var(--line)}
+
+/* settings */
+#settings{padding:0}
+#settings summary{list-style:none; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:16px}
+#settings summary::-webkit-details-marker{display:none}
+#settings summary::after{content:"+"; font:600 20px var(--f-display); color:var(--muted); margin-left:4px}
+#settings[open] summary::after{content:"–"}
+.set-body{padding:0 16px 16px; display:flex; flex-direction:column; gap:14px}
+.inl{display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap}
+.inl .fld{flex:1; min-width:140px}
+.sub{font:600 15px var(--f-display); margin:6px 0 0}
+.calc-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.calc-res{padding:12px; background:var(--surface-2); border-radius:12px; display:flex; flex-direction:column; gap:8px; font-size:14px}
+.note{font-size:12px; color:var(--muted); margin:0}
+
+#toast{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(16px + env(safe-area-inset-bottom,0px)); max-width:calc(100% - 32px); background:var(--fg); color:var(--bg); padding:10px 14px; border-radius:12px; display:flex; gap:14px; align-items:center; font-size:14px; z-index:20}
+#toast button{background:none; border:0; color:inherit; font-weight:600; text-decoration:underline; padding:0}
+
+@media (max-width:480px){
+  .sum{grid-template-columns:1fr}
+  .mrow{grid-template-columns:58px 1fr 84px}
+  .calc-grid{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Piringku</h1>
+      <span id="status" class="status" data-mode="local">Tersimpan di browser ini</span>
+    </div>
+    <nav class="datenav" aria-label="Pilih tanggal">
+      <button id="prev" type="button" aria-label="Hari sebelumnya"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <div class="dlabel"><strong id="dlabel"></strong><span id="dsub"></span></div>
+      <button id="next" type="button" aria-label="Hari berikutnya"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+    </nav>
+  </header>
+
+  <section id="summary" class="card sum" aria-label="Ringkasan kalori hari ini"></section>
+  <section id="meals" class="card" aria-label="Catatan makanan"></section>
+
+  <section class="card" aria-label="Kalori 7 hari terakhir">
+    <div class="week-h"><h2 class="sec-h">7 hari terakhir</h2><span id="weeksum"></span></div>
+    <div id="week" class="chart-wrap"></div>
+  </section>
+
+  <details id="settings" class="card">
+    <summary><span class="sec-h">Target kalori</span><span id="goalsum" class="muted"></span></summary>
+    <div class="set-body">
+      <form id="goalform" class="inl" autocomplete="off" novalidate>
+        <label class="fld" for="g-goal">Target harian (kcal)<input id="g-goal" type="number" inputmode="numeric" min="800" max="6000" step="50"></label>
+        <button class="btn primary" type="submit">Simpan target</button>
+      </form>
+      <p id="goalerr" class="formerr" role="alert" hidden></p>
+      <h3 class="sub">Belum tahu targetmu?</h3>
+      <form id="calcform" autocomplete="off" novalidate style="display:flex;flex-direction:column;gap:10px">
+        <div class="calc-grid">
+          <label class="fld" for="k-sex">Jenis kelamin<select id="k-sex"><option value="m">Laki-laki</option><option value="f">Perempuan</option></select></label>
+          <label class="fld" for="k-age">Usia (tahun)<input id="k-age" type="number" inputmode="numeric" min="10" max="100"></label>
+          <label class="fld" for="k-w">Berat (kg)<input id="k-w" type="number" inputmode="decimal" min="25" max="300" step="0.1"></label>
+          <label class="fld" for="k-h">Tinggi (cm)<input id="k-h" type="number" inputmode="numeric" min="100" max="230"></label>
+          <label class="fld wide" for="k-act">Aktivitas
+            <select id="k-act">
+              <option value="1.2">Jarang olahraga</option>
+              <option value="1.375" selected>Olahraga ringan, 1–3 kali seminggu</option>
+              <option value="1.55">Olahraga sedang, 3–5 kali seminggu</option>
+              <option value="1.725">Olahraga berat, 6–7 kali seminggu</option>
+            </select>
+          </label>
+          <label class="fld wide" for="k-aim">Tujuan
+            <select id="k-aim">
+              <option value="0">Jaga berat badan</option>
+              <option value="-300">Turun pelan (kurangi 300 kcal)</option>
+              <option value="300">Naik pelan (tambah 300 kcal)</option>
+            </select>
+          </label>
+        </div>
+        <div><button class="btn" type="submit">Hitung perkiraan</button></div>
+      </form>
+      <div id="calcres" class="calc-res" hidden></div>
+      <p class="note">Memakai rumus Mifflin-St Jeor. Ini perkiraan umum dan bukan saran medis. Angka ini tidak disimpan.</p>
+    </div>
+  </details>
+</div>
+
+<div id="form-holder" hidden>
+  <form id="addform" class="addform" autocomplete="off" novalidate>
+    <div class="fgrid">
+      <label class="fld wide" for="f-name">Nama makanan<input id="f-name" type="text" maxlength="80" placeholder="mis. nasi goreng"></label>
+      <label class="fld" for="f-kcal">Kalori (kcal)<input id="f-kcal" type="number" inputmode="decimal" min="0" max="20000" step="1"></label>
+      <label class="fld" for="f-porsi">Porsi<input id="f-porsi" type="number" inputmode="decimal" min="0.25" max="20" step="0.25" value="1"></label>
+    </div>
+    <details id="f-more">
+      <summary>Protein, karbo, lemak (opsional)</summary>
+      <div class="fgrid3">
+        <label class="fld" for="f-p">Protein (g)<input id="f-p" type="number" inputmode="decimal" min="0" step="0.5"></label>
+        <label class="fld" for="f-c">Karbo (g)<input id="f-c" type="number" inputmode="decimal" min="0" step="0.5"></label>
+        <label class="fld" for="f-f">Lemak (g)<input id="f-f" type="number" inputmode="decimal" min="0" step="0.5"></label>
+      </div>
+    </details>
+    <div class="picks-h">Makanan umum, angka perkiraan per porsi</div>
+    <div id="picks" class="picks"></div>
+    <p id="formerr" class="formerr" role="alert" hidden></p>
+    <div class="factions">
+      <button type="submit" class="btn primary">Tambah ke <span id="f-meal"></span></button>
+      <button type="button" id="f-close" class="btn">Tutup</button>
+    </div>
+  </form>
+</div>
+
+<div id="toast" role="status" aria-live="polite" hidden><span id="toast-msg"></span><button id="toast-act" type="button" hidden></button></div>
+
+<script>
+(function(){
+'use strict';
+var LS='piringku-v1';
+var MEALS=[{id:'sarapan',n:'Sarapan'},{id:'siang',n:'Makan siang'},{id:'malam',n:'Makan malam'},{id:'camilan',n:'Camilan'}];
+var FOODS=[
+ {n:'Nasi putih (1 piring)',k:260,p:5,c:57,f:1},
+ {n:'Nasi goreng (1 piring)',k:350,p:9,c:48,f:13},
+ {n:'Mie goreng (1 porsi)',k:400,p:10,c:55,f:16},
+ {n:'Mi instan goreng (1 bungkus)',k:380,p:8,c:54,f:15},
+ {n:'Bubur ayam (1 mangkuk)',k:300,p:10,c:45,f:9},
+ {n:'Soto ayam (1 mangkuk, tanpa nasi)',k:250,p:18,c:15,f:13},
+ {n:'Bakso (1 mangkuk)',k:340,p:16,c:38,f:14},
+ {n:'Gado-gado (1 porsi)',k:300,p:12,c:30,f:15},
+ {n:'Sate ayam (10 tusuk)',k:320,p:28,c:12,f:18},
+ {n:'Rendang (1 potong)',k:190,p:12,c:4,f:14},
+ {n:'Ayam goreng (1 potong)',k:240,p:20,c:6,f:15},
+ {n:'Tempe goreng (2 potong)',k:150,p:8,c:7,f:10},
+ {n:'Tahu goreng (1 potong)',k:70,p:4,c:2,f:5},
+ {n:'Telur rebus (1 butir)',k:78,p:6,c:1,f:5},
+ {n:'Telur dadar (1 butir)',k:95,p:6,c:1,f:7.5},
+ {n:'Pisang (1 buah)',k:95,p:1,c:23,f:0},
+ {n:'Pisang goreng (1 buah)',k:140,p:1,c:20,f:6},
+ {n:'Roti tawar (1 lembar)',k:70,p:2.5,c:13,f:1},
+ {n:'Teh manis (1 gelas)',k:90,p:0,c:22,f:0},
+ {n:'Kopi susu gula aren (1 gelas)',k:180,p:3,c:28,f:6},
+ {n:'Susu (1 gelas)',k:120,p:6,c:9,f:7}
+];
+
+function $(s,r){return (r||document).querySelector(s);}
+function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
+var nf=new Intl.NumberFormat('id-ID',{maximumFractionDigits:0});
+var nf1=new Intl.NumberFormat('id-ID',{maximumFractionDigits:2});
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function pad(n){return String(n).padStart(2,'0');}
+function ymd(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function parse(s){var a=s.split('-').map(Number);return new Date(a[0],a[1]-1,a[2]);}
+function addDays(s,n){var d=parse(s);d.setDate(d.getDate()+n);return ymd(d);}
+function todayKey(){return ymd(new Date());}
+function num(v){v=Number(v);return isFinite(v)&&v>0?Math.round(Math.min(v,20000)*10)/10:0;}
+function r1(x){return Math.round(x*10)/10;}
+function newId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function clampGoal(g){g=Number(g);return isFinite(g)&&g>=800&&g<=6000?Math.round(g):2000;}
+function mkEntry(meal,name,kcal,p,c,f){return {id:newId(),meal:meal,name:name,kcal:Math.round(kcal),p:p,c:c,f:f};}
+function cleanEntries(arr){
+  if(!Array.isArray(arr))return [];
+  return arr.filter(function(e){return e&&typeof e==='object';}).map(function(e){
+    var ok=MEALS.some(function(m){return m.id===e.meal;});
+    return {id:String(e.id||newId()),meal:ok?e.meal:'camilan',name:String(e.name||'Tanpa nama').slice(0,80),kcal:Math.round(num(e.kcal)),p:num(e.p),c:num(e.c),f:num(e.f)};
+  });
+}
+function loadLocal(){
+  try{
+    var raw=localStorage.getItem(LS);
+    if(raw){
+      var s=JSON.parse(raw), days={};
+      if(s&&typeof s==='object'){
+        var src=(s.days&&typeof s.days==='object')?s.days:{};
+        Object.keys(src).forEach(function(k){
+          if(/^\d{4}-\d{2}-\d{2}$/.test(k)){var es=cleanEntries(src[k]);if(es.length)days[k]=es;}
+        });
+        return {goal:clampGoal(s.goal),days:days};
+      }
+    }
+  }catch(e){}
+  return {goal:2000,days:{}};
+}
+function saveLocal(){try{localStorage.setItem(LS,JSON.stringify(state));}catch(e){}}
+function canon(s){var ks=Object.keys(s.days).sort();return JSON.stringify([s.goal,ks.map(function(k){return [k,s.days[k]];})]);}
+
+var state=loadLocal();
+var sel=todayKey();
+var openMeal=null, base=null, lastDel=null, toastTimer=0;
+var col=null, unsub=null, migrated=false, dbTimer=0, chain=Promise.resolve();
+
+function dayEntries(d){return state.days[d]||[];}
+function totals(d){
+  var t={k:0,p:0,c:0,f:0};
+  dayEntries(d).forEach(function(e){t.k+=e.kcal;t.p+=e.p;t.c+=e.c;t.f+=e.f;});
+  return t;
+}
+
+/* ---------- penyimpanan ---------- */
+function setStatus(m){
+  var el=$('#status');
+  el.dataset.mode=m;
+  el.textContent=m==='account'?'Tersimpan di akunmu':'Tersimpan di browser ini';
+}
+function persistDay(date){
+  saveLocal();
+  if(!col)return;
+  var list=state.days[date];
+  var payload=list&&list.length?{date:date,entries:list.slice()}:null;
+  chain=chain.then(function(){
+    if(!col)return;
+    var ref=col.doc('d-'+date);
+    return payload?ref.set(payload):ref.delete();
+  }).catch(dbFailed);
+}
+function persistSettings(){
+  saveLocal();
+  if(!col)return;
+  var g=state.goal;
+  chain=chain.then(function(){return col&&col.doc('settings').set({goal:g});}).catch(dbFailed);
+}
+function dbFailed(){
+  if(unsub){try{unsub();}catch(e){}unsub=null;}
+  col=null;
+  setStatus('local');
+}
+function migrateLocal(){
+  if(migrated)return;
+  migrated=true;
+  var ks=Object.keys(state.days);
+  if(!ks.length&&state.goal===2000)return;
+  persistSettings();
+  ks.forEach(persistDay);
+}
+function onSnap(snap){
+  clearTimeout(dbTimer);
+  if(snap.metadata.fromCache&&snap.empty)return;
+  var next={goal:state.goal,days:{}}, has=false;
+  snap.docs.forEach(function(d){
+    var v=d.data()||{};
+    if(d.id==='settings'){has=true;if(v.goal)next.goal=clampGoal(v.goal);}
+    else if(/^d-\d{4}-\d{2}-\d{2}$/.test(d.id)){
+      has=true;
+      var es=cleanEntries(v.entries);
+      if(es.length)next.days[d.id.slice(2)]=es;
+    }
+  });
+  if(!snap.metadata.fromCache)setStatus('account');
+  if(!has){
+    if(!snap.metadata.fromCache)migrateLocal();
+    return;
+  }
+  if(canon(next)!==canon(state)){state=next;saveLocal();renderAll();}
+}
+function initDb(){
+  var c=window.claude;
+  if(!c||typeof c.use!=='function')return;
+  Promise.all([c.use('db'),c.use('user')]).then(function(r){
+    var db=r[0],user=r[1];
+    if(!db||!user)return null;
+    return Promise.resolve(user.id()).then(function(id){
+      if(!id)return;
+      col=db.collection('data/users/'+id);
+      dbTimer=setTimeout(function(){setStatus('local');},10000);
+      unsub=col.onSnapshot(onSnap,dbFailed);
+    });
+  }).catch(function(){});
+}
+
+/* ---------- tampilan ---------- */
+function renderHead(){
+  var d=parse(sel), t=todayKey();
+  $('#dlabel').textContent=d.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long'});
+  var sub=String(d.getFullYear());
+  if(sel===t)sub='Hari ini · '+sub;
+  else if(sel===addDays(t,-1))sub='Kemarin · '+sub;
+  $('#dsub').textContent=sub;
+  $('#next').disabled=sel>=t;
+}
+function mrow(name,g,kc,mk,color){
+  var pc=mk>0?Math.round(kc/mk*100):0;
+  return '<div class="mrow"><span>'+name+'</span><span class="mbar"><i style="width:'+pc+'%;background:'+color+'"></i></span><span class="mval">'+nf.format(g)+' g<em>'+(mk>0?pc+'%':'–')+'</em></span></div>';
+}
+function renderSummary(){
+  var t=totals(sel), goal=state.goal, left=goal-t.k, over=left<0;
+  var C=2*Math.PI*66, off=C*(1-Math.min(1,t.k/goal));
+  var mk=t.p*4+t.c*4+t.f*9;
+  var svg='<svg viewBox="0 0 160 160" aria-hidden="true"><circle class="rbg" cx="80" cy="80" r="66" fill="none" stroke-width="14"/>'+
+    (t.k>0?'<circle class="rfg'+(over?' over':'')+'" cx="80" cy="80" r="66" fill="none" stroke-width="14" stroke-linecap="round" stroke-dasharray="'+C.toFixed(2)+'" stroke-dashoffset="'+off.toFixed(2)+'" transform="rotate(-90 80 80)"/>':'')+'</svg>';
+  $('#summary').innerHTML=
+    '<div class="ring">'+svg+'<div class="ring-c"><strong class="'+(over?'over':'')+'">'+nf.format(Math.abs(left))+'</strong><span>'+(over?'kcal melebihi target':'kcal tersisa')+'</span></div></div>'+
+    '<div class="stats">'+
+      '<div class="stat"><small>Dimakan</small><b>'+nf.format(t.k)+' <i>kcal</i></b></div>'+
+      '<div class="stat"><small>Target</small><b>'+nf.format(goal)+' <i>kcal</i></b><button type="button" class="linkbtn" data-goal>Ubah target</button></div>'+
+    '</div>'+
+    '<div class="macros-box">'+
+      mrow('Protein',t.p,t.p*4,mk,'var(--prot)')+
+      mrow('Karbo',t.c,t.c*4,mk,'var(--carb)')+
+      mrow('Lemak',t.f,t.f*9,mk,'var(--fat)')+
+      '<p class="mnote">Persen dihitung dari makanan yang kamu isi protein, karbo, dan lemaknya.</p>'+
+    '</div>';
+}
+function renderMeals(){
+  var holder=$('#form-holder'), form=$('#addform');
+  holder.appendChild(form);
+  var list=dayEntries(sel);
+  $('#meals').innerHTML=MEALS.map(function(m){
+    var es=list.filter(function(e){return e.meal===m.id;});
+    var sum=es.reduce(function(a,e){return a+e.kcal;},0);
+    var isOpen=openMeal===m.id;
+    var rows=es.length?'<ul class="entries">'+es.map(function(e){
+      var mac=(e.p||e.c||e.f)?'<small>Protein '+nf1.format(e.p)+' · Karbo '+nf1.format(e.c)+' · Lemak '+nf1.format(e.f)+' g</small>':'';
+      return '<li><span class="en">'+esc(e.name)+mac+'</span><span class="ek">'+nf.format(e.kcal)+'<small>kcal</small></span>'+
+        '<button type="button" class="del" data-del="'+esc(e.id)+'" aria-label="Hapus '+esc(e.name)+'"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>';
+    }).join('')+'</ul>':'<p class="empty">Belum ada catatan.</p>';
+    return '<div class="meal" data-meal="'+m.id+'"><div class="meal-h"><h3>'+m.n+'</h3><span class="meal-k">'+(es.length?nf.format(sum)+' kcal':'')+'</span>'+
+      '<button type="button" class="add" data-add="'+m.id+'" aria-expanded="'+isOpen+'">'+(isOpen?'Tutup':'+ Tambah')+'</button></div>'+rows+'<div class="slot"></div></div>';
+  }).join('');
+  if(openMeal){
+    var slot=$('.meal[data-meal="'+openMeal+'"] .slot');
+    if(slot)slot.appendChild(form);
+  }
+}
+function renderWeek(){
+  var days=[];
+  for(var i=6;i>=0;i--)days.push(addDays(sel,-i));
+  var vals=days.map(function(d){return totals(d).k;});
+  var goal=state.goal;
+  var top=Math.ceil(Math.max(goal*1.15,Math.max.apply(null,vals))/500)*500;
+  var W=336,H=168,pt=18,ph=108,bw=34,gap=(W-7*bw)/6,by=pt+ph;
+  var gy=pt+ph*(1-goal/top);
+  var s='<svg viewBox="0 0 '+W+' '+H+'" role="group" aria-label="Kalori per hari">';
+  s+='<line class="base" x1="0" x2="'+W+'" y1="'+by+'" y2="'+by+'"/>';
+  days.forEach(function(d,i){
+    var v=vals[i], x=i*(bw+gap), h=ph*(v/top), y=by-h;
+    var dt=parse(d), over=v>goal, isSel=d===sel;
+    var wd=dt.toLocaleDateString('id-ID',{weekday:'short'}).replace('.','');
+    var lbl=dt.toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long'})+': '+nf.format(v)+' kcal';
+    s+='<g class="col" data-date="'+d+'" role="button" tabindex="0" aria-label="'+lbl+'">'+
+      '<rect x="'+x.toFixed(1)+'" y="0" width="'+bw+'" height="'+H+'" fill="transparent"/>'+
+      (v>0?'<rect class="bar'+(over?' over':'')+'" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw+'" height="'+Math.max(h,2).toFixed(1)+'" rx="4" fill-opacity="'+(isSel?1:0.55)+'"/>'+
+        '<text class="val" x="'+(x+bw/2).toFixed(1)+'" y="'+(y-4).toFixed(1)+'" text-anchor="middle">'+nf.format(v)+'</text>'
+        :'<rect class="nil" x="'+x.toFixed(1)+'" y="'+(by-2)+'" width="'+bw+'" height="2" rx="1"/>')+
+      '<text class="ax'+(isSel?' sel':'')+'" x="'+(x+bw/2).toFixed(1)+'" y="'+(by+16)+'" text-anchor="middle">'+wd+'</text>'+
+      '<text class="ax'+(isSel?' sel':'')+'" x="'+(x+bw/2).toFixed(1)+'" y="'+(by+30)+'" text-anchor="middle">'+dt.getDate()+'</text></g>';
+  });
+  s+='<line class="gl" x1="0" x2="'+W+'" y1="'+gy.toFixed(1)+'" y2="'+gy.toFixed(1)+'"/>'+
+     '<text class="glt" x="0" y="'+(gy-5).toFixed(1)+'">Target '+nf.format(goal)+'</text></svg>';
+  $('#week').innerHTML=s;
+  var logged=vals.filter(function(v){return v>0;});
+  $('#weeksum').textContent=logged.length?'Rata-rata '+nf.format(logged.reduce(function(a,b){return a+b;},0)/logged.length)+' kcal per hari tercatat':'Belum ada catatan di minggu ini';
+}
+function renderGoal(){
+  $('#goalsum').textContent=nf.format(state.goal)+' kcal';
+  var inp=$('#g-goal');
+  if(document.activeElement!==inp)inp.value=state.goal;
+}
+function renderAll(){renderHead();renderSummary();renderMeals();renderWeek();renderGoal();}
+
+/* ---------- toast ---------- */
+function toast(msg,actLabel,act){
+  var t=$('#toast'), b=$('#toast-act');
+  $('#toast-msg').textContent=msg;
+  if(actLabel){b.hidden=false;b.textContent=actLabel;b.onclick=act;}else{b.hidden=true;b.onclick=null;}
+  t.hidden=false;
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){t.hidden=true;},actLabel?6000:2500);
+}
+
+/* ---------- form tambah ---------- */
+function porsiVal(){var v=Number($('#f-porsi').value);return v>0?v:1;}
+function showErr(msg){var e=$('#formerr');e.textContent=msg;e.hidden=false;}
+function clearErr(){$('#formerr').hidden=true;}
+function filterPicks(q){
+  q=q.trim().toLowerCase();
+  $$('#picks .chip').forEach(function(c){c.hidden=!!q&&c.dataset.n.indexOf(q)<0;});
+}
+function resetForm(){
+  ['#f-name','#f-kcal','#f-p','#f-c','#f-f'].forEach(function(s){$(s).value='';});
+  $('#f-porsi').value='1';
+  $('#f-more').open=false;
+  base=null;
+  clearErr();
+  filterPicks('');
+}
+function applyBase(){
+  if(!base)return;
+  var m=porsiVal();
+  $('#f-kcal').value=Math.round(base.k*m);
+  $('#f-p').value=r1(base.p*m);
+  $('#f-c').value=r1(base.c*m);
+  $('#f-f').value=r1(base.f*m);
+}
+function toggleMeal(id){
+  openMeal=openMeal===id?null:id;
+  if(openMeal){
+    resetForm();
+    var m=MEALS.filter(function(x){return x.id===id;})[0];
+    $('#f-meal').textContent=m.n.toLowerCase();
+  }
+  renderMeals();
+  if(openMeal)$('#f-name').focus();
+}
+
+/* ---------- event ---------- */
+$('#picks').innerHTML=FOODS.map(function(f,i){
+  return '<button type="button" class="chip" data-i="'+i+'" data-n="'+esc(f.n.toLowerCase())+'">'+esc(f.n)+' <b>'+f.k+'</b></button>';
+}).join('');
+
+$('#prev').addEventListener('click',function(){sel=addDays(sel,-1);renderAll();});
+$('#next').addEventListener('click',function(){if(sel<todayKey()){sel=addDays(sel,1);renderAll();}});
+
+$('#summary').addEventListener('click',function(ev){
+  if(ev.target.closest('[data-goal]')){
+    var s=$('#settings');s.open=true;
+    s.scrollIntoView({behavior:'smooth',block:'center'});
+    $('#g-goal').focus({preventScroll:true});
+  }
+});
+
+$('#meals').addEventListener('click',function(ev){
+  var b=ev.target.closest('button');
+  if(!b)return;
+  if(b.dataset.add){toggleMeal(b.dataset.add);return;}
+  if(b.dataset.del){
+    var list=state.days[sel]||[];
+    var i=list.findIndex(function(e){return e.id===b.dataset.del;});
+    if(i<0)return;
+    var removed=list.splice(i,1)[0];
+    if(!list.length)delete state.days[sel];
+    var date=sel;
+    lastDel={date:date,e:removed,i:i};
+    persistDay(date);
+    renderAll();
+    toast('Dihapus: '+removed.name,'Urungkan',function(){
+      var l=state.days[date]=state.days[date]||[];
+      l.splice(Math.min(i,l.length),0,removed);
+      persistDay(date);
+      renderAll();
+      $('#toast').hidden=true;
+    });
+  }
+});
+
+$('#addform').addEventListener('click',function(ev){
+  var c=ev.target.closest('.chip');
+  if(!c)return;
+  base=FOODS[Number(c.dataset.i)];
+  $('#f-name').value=base.n;
+  $('#f-more').open=true;
+  applyBase();
+  clearErr();
+  $('#f-kcal').focus();
+});
+$('#f-porsi').addEventListener('input',applyBase);
+['#f-kcal','#f-p','#f-c','#f-f'].forEach(function(s){$(s).addEventListener('input',function(){base=null;clearErr();});});
+$('#f-name').addEventListener('input',function(){filterPicks(this.value);clearErr();});
+$('#f-close').addEventListener('click',function(){toggleMeal(openMeal);});
+
+$('#addform').addEventListener('submit',function(ev){
+  ev.preventDefault();
+  if(!openMeal)return;
+  var name=$('#f-name').value.trim();
+  var p=num($('#f-p').value), c=num($('#f-c').value), f=num($('#f-f').value);
+  var k=num($('#f-kcal').value);
+  if(!k)k=Math.round(p*4+c*4+f*9);
+  if(!k){showErr('Isi kalori, atau isi protein, karbo, dan lemaknya.');$('#f-kcal').focus();return;}
+  var m=porsiVal();
+  if(base&&name===base.n&&m!==1)name=name+' ×'+nf1.format(m);
+  if(!name)name='Tanpa nama';
+  var list=state.days[sel]=state.days[sel]||[];
+  list.push(mkEntry(openMeal,name,k,p,c,f));
+  persistDay(sel);
+  resetForm();
+  renderAll();
+  $('#f-name').focus();
+});
+
+$('#week').addEventListener('click',function(ev){
+  var g=ev.target.closest('[data-date]');
+  if(g){sel=g.dataset.date;renderAll();}
+});
+$('#week').addEventListener('keydown',function(ev){
+  if(ev.key!=='Enter'&&ev.key!==' ')return;
+  var g=ev.target.closest('[data-date]');
+  if(g){ev.preventDefault();sel=g.dataset.date;renderAll();}
+});
+
+function setGoal(v){
+  state.goal=Math.round(v);
+  persistSettings();
+  renderAll();
+  toast('Target diperbarui: '+nf.format(state.goal)+' kcal');
+}
+$('#goalform').addEventListener('submit',function(ev){
+  ev.preventDefault();
+  var v=Number($('#g-goal').value), e=$('#goalerr');
+  if(!(v>=800&&v<=6000)){e.textContent='Isi target antara 800 dan 6.000 kcal.';e.hidden=false;return;}
+  e.hidden=true;
+  setGoal(v);
+});
+$('#calcform').addEventListener('submit',function(ev){
+  ev.preventDefault();
+  var a=Number($('#k-age').value), w=Number($('#k-w').value), h=Number($('#k-h').value);
+  var res=$('#calcres');
+  res.hidden=false;
+  if(!(a>=10&&a<=100&&w>=25&&w<=300&&h>=100&&h<=230)){
+    res.innerHTML='<span style="color:var(--warn);font-weight:500">Lengkapi usia, berat, dan tinggi dengan angka yang masuk akal.</span>';
+    return;
+  }
+  var bmr=10*w+6.25*h-5*a+($('#k-sex').value==='m'?5:-161);
+  var tdee=bmr*Number($('#k-act').value);
+  var goal=Math.max(1200,Math.round((tdee+Number($('#k-aim').value))/50)*50);
+  res.innerHTML='<span>Perkiraan kebutuhanmu <b>'+nf.format(goal)+' kcal</b> per hari.</span><div><button type="button" class="btn primary" id="use-calc">Pakai sebagai target</button></div>';
+  $('#use-calc').onclick=function(){setGoal(goal);};
+});
+
+renderAll();
+initDb();
+})();
+</script>
+
+</body>
+</html>
