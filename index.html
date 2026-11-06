@@ -127,6 +127,8 @@ h1{font:700 30px/1.1 var(--f-display); letter-spacing:-.02em; margin:0}
 .chip{border:1px solid var(--line); background:var(--surface); border-radius:99px; padding:6px 11px; font-size:13px; display:inline-flex; gap:6px; align-items:baseline; text-align:left}
 .chip:hover{border-color:var(--accent)}
 .chip b{font-weight:600; color:var(--muted); font-size:12px}
+.chip.on{border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent)}
+#matchhint{margin:0; font-size:13px}
 .formerr{margin:0; font-size:13px; color:var(--warn); font-weight:500}
 .factions{display:flex; gap:8px; flex-wrap:wrap}
 .btn{height:42px; padding:0 16px; border-radius:10px; border:1px solid var(--line); background:var(--surface); font-weight:600}
@@ -243,9 +245,10 @@ h1{font:700 30px/1.1 var(--f-display); letter-spacing:-.02em; margin:0}
   <form id="addform" class="addform" autocomplete="off" novalidate>
     <div class="fgrid">
       <label class="fld wide" for="f-name">Nama makanan<input id="f-name" type="text" maxlength="80" placeholder="mis. nasi goreng"></label>
+      <label class="fld" for="f-gram">Berat (gram)<input id="f-gram" type="number" inputmode="decimal" min="1" max="5000" step="1" placeholder="mis. 150"></label>
       <label class="fld" for="f-kcal">Kalori (kcal)<input id="f-kcal" type="number" inputmode="decimal" min="0" max="20000" step="1"></label>
-      <label class="fld" for="f-porsi">Porsi<input id="f-porsi" type="number" inputmode="decimal" min="0.25" max="20" step="0.25" value="1"></label>
     </div>
+    <p id="matchhint" hidden></p>
     <details id="f-more">
       <summary>Protein, karbo, lemak (opsional)</summary>
       <div class="fgrid3">
@@ -254,7 +257,7 @@ h1{font:700 30px/1.1 var(--f-display); letter-spacing:-.02em; margin:0}
         <label class="fld" for="f-f">Lemak (g)<input id="f-f" type="number" inputmode="decimal" min="0" step="0.5"></label>
       </div>
     </details>
-    <div class="picks-h">Makanan umum, angka perkiraan per porsi</div>
+    <div id="picks-h" class="picks-h">Makanan umum, kalori per porsi biasa</div>
     <div id="picks" class="picks"></div>
     <p id="formerr" class="formerr" role="alert" hidden></p>
     <div class="factions">
@@ -271,29 +274,293 @@ h1{font:700 30px/1.1 var(--f-display); letter-spacing:-.02em; margin:0}
 'use strict';
 var LS='piringku-v1';
 var MEALS=[{id:'sarapan',n:'Sarapan'},{id:'siang',n:'Makan siang'},{id:'malam',n:'Makan malam'},{id:'camilan',n:'Camilan'}];
-var FOODS=[
- {n:'Nasi putih (1 piring)',k:260,p:5,c:57,f:1},
- {n:'Nasi goreng (1 piring)',k:350,p:9,c:48,f:13},
- {n:'Mie goreng (1 porsi)',k:400,p:10,c:55,f:16},
- {n:'Mi instan goreng (1 bungkus)',k:380,p:8,c:54,f:15},
- {n:'Bubur ayam (1 mangkuk)',k:300,p:10,c:45,f:9},
- {n:'Soto ayam (1 mangkuk, tanpa nasi)',k:250,p:18,c:15,f:13},
- {n:'Bakso (1 mangkuk)',k:340,p:16,c:38,f:14},
- {n:'Gado-gado (1 porsi)',k:300,p:12,c:30,f:15},
- {n:'Sate ayam (10 tusuk)',k:320,p:28,c:12,f:18},
- {n:'Rendang (1 potong)',k:190,p:12,c:4,f:14},
- {n:'Ayam goreng (1 potong)',k:240,p:20,c:6,f:15},
- {n:'Tempe goreng (2 potong)',k:150,p:8,c:7,f:10},
- {n:'Tahu goreng (1 potong)',k:70,p:4,c:2,f:5},
- {n:'Telur rebus (1 butir)',k:78,p:6,c:1,f:5},
- {n:'Telur dadar (1 butir)',k:95,p:6,c:1,f:7.5},
- {n:'Pisang (1 buah)',k:95,p:1,c:23,f:0},
- {n:'Pisang goreng (1 buah)',k:140,p:1,c:20,f:6},
- {n:'Roti tawar (1 lembar)',k:70,p:2.5,c:13,f:1},
- {n:'Teh manis (1 gelas)',k:90,p:0,c:22,f:0},
- {n:'Kopi susu gula aren (1 gelas)',k:180,p:3,c:28,f:6},
- {n:'Susu (1 gelas)',k:120,p:6,c:9,f:7}
+var RAW=[
+ ['Nasi putih','1 piring',200,260,5,57,1,'nasi'],
+ ['Nasi goreng','1 piring',200,350,9,48,13,'nasgor'],
+ ['Dada ayam rebus','100 g',100,165,31,0,4,'ayam'],
+ ['Ayam goreng','1 potong',80,240,20,6,15,''],
+ ['Tempe goreng','2 potong',60,150,8,7,10,''],
+ ['Telur rebus','1 butir',55,78,6,1,5,'telor'],
+ ['Mie goreng','1 porsi',250,400,10,55,16,'mi goreng'],
+ ['Soto ayam','1 mangkuk, tanpa nasi',300,250,18,15,13,''],
+ ['Bakso','1 mangkuk',300,340,16,38,14,'baso'],
+ ['Gado-gado','1 porsi',250,300,12,30,15,'gado gado'],
+ ['Pisang','1 buah',100,95,1,23,0,'buah'],
+ ['Teh manis','1 gelas',200,90,0,22,0,'es teh manis'],
+ ['Paha ayam tanpa kulit, rebus','100 g',100,180,26,0,8,'ayam'],
+ ['Daging sapi has dalam, panggang','100 g',100,195,28,0,9,'steak'],
+ ['Ikan salmon, panggang','100 g',100,206,22,0,12,'ikan'],
+ ['Udang rebus','100 g',100,100,24,0.2,0.3,''],
+ ['Tahu putih','100 g',100,76,8,2,5,''],
+ ['Tempe kukus','100 g',100,192,20,8,11,''],
+ ['Kentang rebus','100 g',100,87,2,20,0.1,''],
+ ['Brokoli rebus','100 g',100,35,2.4,7,0.4,'sayur'],
+ ['Kopi susu gula aren','1 gelas',250,180,3,28,6,'kopi'],
+ ['Nasi merah','1 piring',200,220,5,46,2,''],
+ ['Nasi uduk','1 piring',200,340,6,52,12,''],
+ ['Nasi kuning','1 piring',200,320,6,52,10,''],
+ ['Nasi padang (nasi, rendang, sayur, sambal)','1 porsi',500,700,28,85,28,'padang'],
+ ['Lontong','1 potong',100,100,2,22,0.3,''],
+ ['Mie ayam','1 mangkuk',400,390,14,55,12,'mi ayam'],
+ ['Kwetiau goreng','1 porsi',250,420,12,58,16,'kwetau'],
+ ['Bihun goreng','1 porsi',200,330,7,52,10,''],
+ ['Mi instan goreng','1 bungkus, berat kering',85,380,8,54,15,'indomie'],
+ ['Mi instan kuah','1 bungkus, berat kering',75,350,8,50,13,'indomie'],
+ ['Bubur ayam','1 mangkuk',300,300,10,45,9,''],
+ ['Lontong sayur','1 porsi',300,330,8,52,10,''],
+ ['Ketoprak','1 porsi',300,380,14,45,16,''],
+ ['Nasi pecel','1 porsi',300,420,13,60,14,'pecel'],
+ ['Soto betawi','1 mangkuk',350,400,15,12,32,''],
+ ['Rawon','1 mangkuk, tanpa nasi',300,250,22,8,14,''],
+ ['Sop ayam','1 mangkuk',250,150,12,10,7,''],
+ ['Sayur asem','1 mangkuk',200,75,2,12,2,'asam sayur'],
+ ['Sayur lodeh','1 mangkuk',200,150,4,12,10,'sayur'],
+ ['Capcay','1 porsi',200,160,8,12,9,'cap cay sayur'],
+ ['Tumis kangkung','1 porsi',100,90,3,6,6,'sayur'],
+ ['Sayur bayam bening','1 mangkuk',200,40,2,6,1,'sayur'],
+ ['Urap sayur','1 porsi',100,130,4,12,7,'sayur'],
+ ['Lalapan','1 porsi',100,30,1,5,0.5,'sayur'],
+ ['Ayam bakar','1 potong',100,200,22,3,11,''],
+ ['Ayam geprek, tanpa nasi','1 porsi',150,350,22,18,22,''],
+ ['Ayam penyet, tanpa nasi','1 porsi',150,330,24,12,21,''],
+ ['Opor ayam','1 potong dengan kuah',200,300,22,5,22,''],
+ ['Gulai ayam','1 potong dengan kuah',200,280,20,6,19,''],
+ ['Sate ayam','10 tusuk',150,320,28,12,18,''],
+ ['Sate kambing','5 tusuk',100,280,24,4,19,''],
+ ['Rendang','1 potong',50,190,12,4,14,'daging sapi'],
+ ['Semur daging','1 potong',100,170,14,6,10,'daging sapi'],
+ ['Empal goreng','1 potong',70,200,18,4,12,'daging sapi'],
+ ['Pepes ikan','1 bungkus',100,150,18,3,7,''],
+ ['Ikan goreng','1 potong sedang',80,190,20,3,11,''],
+ ['Ikan bakar','1 porsi',100,170,24,2,7,''],
+ ['Lele goreng','1 ekor',100,250,22,2,17,'ikan'],
+ ['Cumi goreng tepung','1 porsi',100,280,16,20,15,''],
+ ['Tempe bacem','2 potong',70,170,9,14,9,''],
+ ['Tahu goreng','1 potong',40,70,4,2,5,''],
+ ['Tahu isi','1 buah',60,100,3,10,5,'gorengan'],
+ ['Perkedel kentang','1 buah',50,100,3,10,5,''],
+ ['Telur dadar','1 butir',60,95,6,1,7.5,'telor omelet'],
+ ['Telur mata sapi','1 butir',55,100,6,1,8,'telor ceplok'],
+ ['Telur balado','1 butir',70,130,7,5,9,'telor'],
+ ['Martabak telur','1 potong',80,220,9,18,13,''],
+ ['Martabak manis','1 potong',80,260,5,36,11,'terang bulan'],
+ ['Batagor','1 porsi',150,350,15,30,19,''],
+ ['Siomay','1 porsi',150,300,15,32,13,''],
+ ['Pempek dengan cuko','3 buah',150,300,12,45,8,'empek'],
+ ['Kerupuk','3 keping',15,70,0.5,9,3.5,''],
+ ['Bakwan','1 buah',50,120,2,14,6,'bala bala gorengan'],
+ ['Pisang goreng','1 buah',60,140,1,20,6,'gorengan'],
+ ['Mendoan','1 potong',40,110,5,9,6,'tempe gorengan'],
+ ['Singkong goreng','3 potong',100,200,1,32,8,'gorengan'],
+ ['Ubi rebus','1 buah sedang',150,120,1,28,0.2,''],
+ ['Kentang goreng','1 porsi sedang',100,320,4,41,16,'french fries'],
+ ['Lemper','1 buah',50,120,3,20,3,'jajanan'],
+ ['Risoles','1 buah',60,150,5,15,8,'jajanan'],
+ ['Pastel','1 buah',50,135,3,15,7,'jajanan'],
+ ['Onde-onde','1 buah',40,125,2,18,5,'onde onde jajanan'],
+ ['Klepon','3 buah',60,160,2,34,2,'jajanan'],
+ ['Dadar gulung','1 buah',50,115,2,20,3,'jajanan'],
+ ['Kue lapis','1 potong',50,100,1,20,2,'jajanan'],
+ ['Es cendol','1 gelas',250,250,2,48,6,'dawet'],
+ ['Kopi hitam tanpa gula','1 cangkir',200,5,0,1,0,'kopi'],
+ ['Susu','1 gelas',200,120,6,9,7,''],
+ ['Susu kedelai','1 gelas',200,100,7,8,4,''],
+ ['Jus jeruk','1 gelas',250,110,1,26,0.3,''],
+ ['Jus alpukat','1 gelas',250,280,3,30,17,''],
+ ['Air kelapa','1 gelas',200,45,0.5,10,0.3,''],
+ ['Minuman soda','1 kaleng 330 ml',330,140,0,35,0,'soft drink'],
+ ['Apel','1 buah',180,95,0.5,25,0.3,'buah'],
+ ['Jeruk','1 buah',130,60,1,15,0.2,'buah'],
+ ['Mangga','1 buah',200,135,1.5,32,0.7,'buah'],
+ ['Semangka','1 potong',200,60,1,15,0.3,'buah'],
+ ['Pepaya','1 potong',150,60,0.7,15,0.2,'buah'],
+ ['Melon','1 potong',150,50,1,12,0.2,'buah'],
+ ['Nanas','1 potong',100,50,0.5,13,0.1,'nenas buah'],
+ ['Alpukat','1/2 buah',100,170,2,9,15,'avokad buah'],
+ ['Roti tawar','1 lembar',30,70,2.5,13,1,''],
+ ['Roti bakar cokelat keju','2 lembar',120,350,9,45,15,''],
+ ['Roti manis isi','1 buah',80,250,6,40,7,''],
+ ['Oatmeal, dimasak dengan air','1 mangkuk',250,150,5,27,3,'oat'],
+ ['Sereal dengan susu','1 mangkuk',250,250,7,45,5,'cereal'],
+ ['Biskuit','2 keping',25,100,1.5,15,4,'cemilan'],
+ ['Wafer cokelat','1 bungkus kecil',30,140,1.5,19,7,'cemilan'],
+ ['Keripik kentang','1 bungkus kecil',30,160,2,15,10,'chips cemilan'],
+ ['Cokelat batang','1 batang',40,210,3,23,12,'coklat'],
+ ['Yoghurt plain','1 cup',150,90,5,7,5,'yogurt'],
+ ['Kacang tanah','1 genggam',30,170,7,5,14,'cemilan'],
+ ['Pizza','1 slice',100,280,12,34,10,''],
+ ['Burger','1 buah',200,350,16,33,17,'hamburger'],
+ ['Ayam goreng tepung','1 potong',100,290,17,10,20,'fried chicken'],
+ ['Ketupat','1 potong',100,110,2,24,0.3,'lebaran'],
+ ['Nasi liwet','1 piring',200,330,6,50,11,''],
+ ['Nasi bakar ayam','1 bungkus',250,400,18,50,13,''],
+ ['Nasi rames','1 porsi',400,600,22,80,22,'nasi campur'],
+ ['Nasi tim ayam','1 mangkuk',300,320,18,45,8,''],
+ ['Nasi kebuli','1 piring',250,450,15,65,14,'biryani briyani'],
+ ['Mie rebus','1 mangkuk',400,380,12,60,9,'mi kuah'],
+ ['Mie aceh','1 porsi',300,480,16,60,20,'mi'],
+ ['Mie bakso','1 mangkuk',400,450,18,60,15,'mi baso'],
+ ['Soto mie','1 mangkuk',400,360,18,40,14,'mi'],
+ ['Spaghetti bolognese','1 piring',300,450,18,60,15,'pasta'],
+ ['Makaroni schotel','1 potong',150,280,12,22,16,'macaroni'],
+ ['Pasta matang','100 g',100,158,5.8,31,0.9,'spaghetti makaroni'],
+ ['Roti gandum','1 lembar',30,75,3,13,1,'whole wheat'],
+ ['Roti sobek','1 potong',40,120,3,20,3,''],
+ ['Roti canai','1 buah',100,300,6,35,15,'prata'],
+ ['Bubur kacang hijau','1 mangkuk',250,230,6,38,6,'burjo'],
+ ['Bubur sumsum','1 mangkuk',200,190,2,30,7,''],
+ ['Bubur ketan hitam','1 mangkuk',200,260,4,45,7,''],
+ ['Bubur manado (tinutuan)','1 mangkuk',300,180,5,35,2,'tinutuan'],
+ ['Ketan kukus','1 porsi',150,230,4,50,1,''],
+ ['Singkong rebus','1 potong',100,150,1,36,0.3,'ubi kayu'],
+ ['Jagung rebus','1 tongkol',150,140,4,28,1.5,''],
+ ['Talas rebus','100 g',100,140,0.5,34,0.2,''],
+ ['Granola','50 g',50,220,5,30,9,'cemilan'],
+ ['Ayam goreng kremes','1 potong',100,300,22,8,20,''],
+ ['Ayam rica-rica','1 porsi',150,300,24,6,20,''],
+ ['Ayam bumbu kuning','1 potong',100,220,20,4,14,'ayam'],
+ ['Ayam kecap','1 potong',100,210,20,8,11,''],
+ ['Ayam pop','1 potong',100,220,20,3,14,'padang'],
+ ['Sayap ayam goreng','1 buah',50,130,10,3,9,'ayam'],
+ ['Dada ayam goreng','100 g',100,240,26,5,13,'ayam'],
+ ['Ati ampela ayam','1 porsi',50,110,9,2,7,'ayam hati'],
+ ['Daging sapi giling, matang','100 g',100,250,26,0,16,''],
+ ['Steak sapi','1 potong',150,330,38,0,19,'daging sapi'],
+ ['Iga bakar','1 porsi',200,520,34,12,38,'daging sapi'],
+ ['Sop buntut','1 mangkuk',400,400,24,12,28,'daging sapi'],
+ ['Sop konro','1 mangkuk',400,350,28,6,24,'daging sapi'],
+ ['Coto makassar','1 mangkuk',350,300,22,8,20,'daging sapi'],
+ ['Soto banjar','1 mangkuk',300,220,16,18,9,''],
+ ['Soto lamongan','1 mangkuk',300,260,18,16,13,''],
+ ['Tongseng kambing','1 porsi',250,400,25,12,28,''],
+ ['Sate padang','10 tusuk',150,400,25,20,25,''],
+ ['Sate telur puyuh','3 tusuk',60,120,8,2,9,''],
+ ['Dendeng balado','1 potong',30,130,9,6,8,'daging sapi'],
+ ['Gulai nangka','1 porsi',100,90,2,10,5,'padang'],
+ ['Gudeg','1 porsi',150,220,5,28,10,'nangka'],
+ ['Nasi gudeg komplit','1 porsi',450,700,30,85,26,'gudeg ayam telur krecek'],
+ ['Kornet sapi','100 g',100,215,16,1.5,16,'corned beef'],
+ ['Sosis sapi','1 buah',50,150,6,3,12,''],
+ ['Nugget ayam','3 potong',60,160,8,10,10,''],
+ ['Telur puyuh rebus','5 butir',50,80,6.5,0.5,5.5,'telor'],
+ ['Telur asin','1 butir',60,90,7,1,6.5,'telor'],
+ ['Ikan kembung goreng','1 ekor',80,180,18,2,11,'ikan'],
+ ['Ikan nila goreng','1 ekor',150,270,30,3,15,'ikan'],
+ ['Ikan gurame goreng','1 potong',150,280,28,5,16,'ikan'],
+ ['Ikan asin','1 potong',20,50,8,0,2,''],
+ ['Tuna kaleng dalam air','100 g',100,110,25,0,1,'ikan'],
+ ['Sarden kaleng saus tomat','100 g',100,160,15,6,8,'ikan'],
+ ['Udang goreng tepung','5 ekor',100,250,15,18,14,''],
+ ['Kepiting saus padang','1 porsi',200,280,28,12,13,''],
+ ['Cumi bakar','1 porsi',100,150,20,3,6,''],
+ ['Kerang rebus','100 g',100,90,13,4,2,''],
+ ['Tempe orek','1 porsi',50,130,6,12,7,''],
+ ['Tahu bacem','1 potong',50,80,5,6,4,''],
+ ['Tahu sumedang','1 buah',30,60,3,1,5,'tahu goreng'],
+ ['Tahu telur','1 porsi',200,350,17,25,20,''],
+ ['Sayur sop','1 mangkuk',250,90,3,12,3,''],
+ ['Tumis kacang panjang','1 porsi',100,80,3,8,4,'sayur'],
+ ['Terong balado','1 porsi',100,110,2,10,7,'sayur'],
+ ['Perkedel jagung','1 buah',40,90,2,10,5,'bakwan jagung'],
+ ['Karedok','1 porsi',250,280,12,25,15,''],
+ ['Lotek','1 porsi',300,350,14,35,18,'pecel'],
+ ['Asinan sayur','1 porsi',200,100,3,20,1.5,''],
+ ['Rujak buah bumbu','1 porsi',200,150,2,30,3,'rujak buah'],
+ ['Cilok','10 butir',100,180,3,35,3,'jajanan'],
+ ['Cireng','5 buah',100,240,2,40,8,'jajanan gorengan'],
+ ['Seblak','1 porsi',250,400,12,45,20,''],
+ ['Pisang molen','1 buah',60,190,2,28,8,'molen jajanan'],
+ ['Getuk','1 potong',50,100,0.5,24,0.5,'jajanan'],
+ ['Kue cucur','1 buah',40,120,1,20,4,'jajanan'],
+ ['Kue putu','3 buah',50,110,1,22,2,'jajanan'],
+ ['Kue lumpur','1 buah',40,110,2,16,4,'jajanan'],
+ ['Nastar','3 buah',30,130,1.5,16,7,'kue kering'],
+ ['Bolu kukus','1 buah',40,110,2,20,2.5,'kue'],
+ ['Brownies','1 potong',50,220,3,26,12,'kue'],
+ ['Donat gula','1 buah',50,190,3,22,10,'donut'],
+ ['Croissant','1 buah',60,230,5,26,12,''],
+ ['Bakpao isi daging','1 buah',100,230,7,35,6,'bapao'],
+ ['Dimsum','3 buah',60,120,6,12,5,'siomay'],
+ ['Pangsit goreng','5 buah',50,170,5,15,10,''],
+ ['Lumpia goreng','1 buah',60,150,4,14,9,''],
+ ['Kroket','1 buah',60,150,4,15,8,''],
+ ['Otak-otak','1 buah',50,80,6,8,3,'ikan'],
+ ['Es krim','1 scoop',60,130,2,16,7,'ice cream'],
+ ['Es campur','1 mangkuk',300,300,3,60,6,''],
+ ['Es teler','1 mangkuk',300,350,4,50,15,''],
+ ['Es kelapa muda','1 gelas',300,80,1,18,0.5,'kelapa'],
+ ['Kolak pisang','1 mangkuk',250,250,2,48,6,'kolak'],
+ ['Wedang jahe','1 gelas',200,50,0,12,0,''],
+ ['Es jeruk peras','1 gelas',250,90,0.5,22,0.2,'jus jeruk'],
+ ['Cappuccino','1 cangkir',200,110,6,10,5,'kopi'],
+ ['Kafe latte','1 gelas',250,150,8,12,7,'kopi latte'],
+ ['Kopi sachet 3 in 1','1 gelas',200,90,1,15,3,'kopi instan'],
+ ['Teh tawar','1 gelas',200,2,0,0.5,0,''],
+ ['Es lemon tea','1 gelas',250,100,0,25,0,''],
+ ['Bubble tea (boba)','1 gelas 500 ml',500,350,2,70,7,'boba milk tea'],
+ ['Susu cokelat','1 gelas',200,160,6,22,5,'coklat'],
+ ['Susu kental manis','1 sdm',20,60,1.5,10,1.5,'skm'],
+ ['Susu UHT full cream','1 kotak',250,160,8,12,9,''],
+ ['Susu rendah lemak','1 gelas',200,90,7,10,2,'low fat'],
+ ['Yakult','1 botol',65,50,0.5,12,0,'probiotik'],
+ ['Minuman isotonik','1 botol 500 ml',500,130,0,32,0,'pocari'],
+ ['Jus mangga','1 gelas',250,150,1,36,0.3,''],
+ ['Jus semangka','1 gelas',250,80,1,19,0.3,''],
+ ['Sirup','1 gelas',250,120,0,30,0,''],
+ ['Whey protein','1 scoop',30,120,24,3,1.5,'suplemen'],
+ ['Protein bar','1 batang',50,200,15,20,7,'suplemen'],
+ ['Jambu biji','1 buah',150,100,2.5,21,1,'buah'],
+ ['Salak','3 buah',100,80,0.4,20,0.1,'buah'],
+ ['Rambutan','5 buah',100,78,0.9,19,0.2,'buah'],
+ ['Anggur','10 butir',80,55,0.6,14,0.3,'buah'],
+ ['Stroberi','5 buah',100,32,0.7,7.7,0.3,'strawberry buah'],
+ ['Kiwi','1 buah',75,45,0.8,11,0.4,'buah'],
+ ['Pir','1 buah',150,85,0.5,23,0.2,'buah'],
+ ['Durian','2 biji',100,150,1.5,27,5,'buah'],
+ ['Buah naga','1/2 buah',150,80,1.5,18,0.5,'buah'],
+ ['Sirsak','100 g',100,66,1,17,0.3,'buah'],
+ ['Kurma','3 buah',70,190,1.5,52,0.2,'buah'],
+ ['Wortel rebus','100 g',100,35,0.8,8,0.2,'sayur'],
+ ['Buncis rebus','100 g',100,35,2,8,0.2,'sayur'],
+ ['Edamame','100 g',100,120,12,9,5,'kedelai'],
+ ['Kacang merah rebus','100 g',100,125,8.5,22,0.5,''],
+ ['Kacang hijau rebus','100 g',100,105,7,19,0.4,''],
+ ['Kacang almond','1 genggam',30,175,6,6,15,'cemilan'],
+ ['Kacang mete','1 genggam',30,165,5,9,13,'jambu mede cemilan'],
+ ['Selai kacang','1 sdm',16,95,4,3,8,'peanut butter'],
+ ['Mentega atau margarin','1 sdt',5,36,0,0,4,'butter'],
+ ['Minyak goreng','1 sdm',14,120,0,0,14,''],
+ ['Gula pasir','1 sdm',12,46,0,12,0,''],
+ ['Madu','1 sdm',21,64,0,17,0,''],
+ ['Santan kental','100 ml',100,200,2,5,20,'kelapa'],
+ ['Mayones','1 sdm',15,100,0.2,0.5,11,''],
+ ['Keju cheddar','1 slice',20,80,5,0.5,6.5,''],
+ ['Keju mozzarella','30 g',30,85,6,1,6.5,''],
+ ['Cheeseburger','1 buah',120,300,15,30,13,'burger'],
+ ['Hot dog','1 buah',120,290,10,24,17,''],
+ ['Kebab','1 buah',200,400,20,40,17,'kebap'],
+ ['Sandwich isi ayam atau telur','1 buah',150,300,14,32,13,''],
+ ['Sushi roll','6 potong',150,240,9,38,6,'sushi'],
+ ['Ramen','1 mangkuk',500,550,22,70,20,''],
+ ['Chicken katsu','1 porsi',150,400,22,25,24,'katsu'],
+ ['Salad sayur dengan dressing','1 porsi',200,150,3,12,10,''],
+ ['Salad buah','1 mangkuk',200,150,1,35,0.5,'buah'],
+ ['Pancake','2 buah',100,230,6,35,7,'']
 ];
+var FOODS=RAW.map(function(r){var g=r[2],m=100/g;return {n:r[0],u:r[1],g:g,k:r[3],p:r[4],c:r[5],f:r[6],a:r[7]||'',k100:r[3]*m,p100:r[4]*m,c100:r[5]*m,f100:r[6]*m};});
+function norm(t){return String(t).toLowerCase().replace(/\bmie\b/g,'mi').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();}
+FOODS.forEach(function(f){f.s=norm(f.n+' '+f.a);});
+function search(q,limit){
+  q=norm(q);
+  if(!q)return [];
+  var toks=q.split(' '), out=[];
+  FOODS.forEach(function(f){
+    if(toks.every(function(t){return (' '+f.s).indexOf(' '+t)>=0;}))out.push({f:f,sc:f.s.indexOf(q)===0?0:(f.s.indexOf(q)>=0?1:2)});
+  });
+  out.sort(function(a,b){return a.sc-b.sc||a.f.n.length-b.f.n.length;});
+  return out.slice(0,limit).map(function(o){return o.f;});
+}
+function cap(t){return t.charAt(0).toUpperCase()+t.slice(1);}
 
 function $(s,r){return (r||document).querySelector(s);}
 function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
@@ -338,7 +605,7 @@ function canon(s){var ks=Object.keys(s.days).sort();return JSON.stringify([s.goa
 
 var state=loadLocal();
 var sel=todayKey();
-var openMeal=null, base=null, lastDel=null, toastTimer=0;
+var openMeal=null, base=null, manual=false, gramTouched=false, lastDel=null, toastTimer=0;
 var col=null, unsub=null, migrated=false, dbTimer=0, chain=Promise.resolve();
 
 function dayEntries(d){return state.days[d]||[];}
@@ -520,28 +787,60 @@ function toast(msg,actLabel,act){
 }
 
 /* ---------- form tambah ---------- */
-function porsiVal(){var v=Number($('#f-porsi').value);return v>0?v:1;}
+function gramVal(){var v=Number($('#f-gram').value);return v>0?Math.min(v,5000):(base?base.g:0);}
 function showErr(msg){var e=$('#formerr');e.textContent=msg;e.hidden=false;}
 function clearErr(){$('#formerr').hidden=true;}
-function filterPicks(q){
-  q=q.trim().toLowerCase();
-  $$('#picks .chip').forEach(function(c){c.hidden=!!q&&c.dataset.n.indexOf(q)<0;});
+function renderPicks(q){
+  var box=$('#picks');
+  var has=q.trim().length>0;
+  var res=has?search(q,12):FOODS.slice(0,12);
+  $('#picks-h').textContent=has?'Hasil pencarian':'Makanan umum, kalori per porsi biasa';
+  box.innerHTML=res.map(function(f){
+    var i=FOODS.indexOf(f);
+    return '<button type="button" class="chip'+(base===f?' on':'')+'" data-i="'+i+'">'+esc(f.n+' ('+f.u+')')+' <b>'+f.k+'</b></button>';
+  }).join('');
+  return res;
+}
+function markPicks(){$$('#picks .chip').forEach(function(c){c.classList.toggle('on',FOODS[Number(c.dataset.i)]===base);});}
+function showHint(){
+  var h=$('#matchhint'), q=$('#f-name').value.trim();
+  if(base){h.innerHTML='Dihitung dari <b>'+esc(base.n)+'</b>. Per 100 g: '+nf1.format(base.k100)+' kcal, protein '+nf1.format(base.p100)+' g, karbo '+nf1.format(base.c100)+' g, lemak '+nf1.format(base.f100)+' g. <button type="button" class="linkbtn" data-portion>Pakai 1 porsi ('+nf1.format(base.g)+' g)</button>';h.hidden=false;}
+  else if(q&&!manual){h.textContent='Belum ada di daftar. Isi kalori dan makronya secara manual.';h.hidden=false;}
+  else h.hidden=true;
+}
+function clearNums(){['#f-kcal','#f-p','#f-c','#f-f'].forEach(function(s){$(s).value='';});}
+function onNameInput(){
+  var q=$('#f-name').value;
+  clearErr();
+  var res=renderPicks(q);
+  if(!manual){
+    if(q.trim()&&res.length){$('#f-more').open=true;setBase(res[0]);markPicks();}
+    else{base=null;clearNums();}
+  }
+  showHint();
 }
 function resetForm(){
-  ['#f-name','#f-kcal','#f-p','#f-c','#f-f'].forEach(function(s){$(s).value='';});
-  $('#f-porsi').value='1';
+  ['#f-name','#f-kcal','#f-p','#f-c','#f-f'].forEach(function(x){$(x).value='';});
+  $('#f-gram').value='';gramTouched=false;
   $('#f-more').open=false;
   base=null;
+  manual=false;
   clearErr();
-  filterPicks('');
+  renderPicks('');
+  showHint();
 }
 function applyBase(){
   if(!base)return;
-  var m=porsiVal();
-  $('#f-kcal').value=Math.round(base.k*m);
-  $('#f-p').value=r1(base.p*m);
-  $('#f-c').value=r1(base.c*m);
-  $('#f-f').value=r1(base.f*m);
+  var m=gramVal()/100;
+  $('#f-kcal').value=Math.round(base.k100*m);
+  $('#f-p').value=r1(base.p100*m);
+  $('#f-c').value=r1(base.c100*m);
+  $('#f-f').value=r1(base.f100*m);
+}
+function setBase(f){
+  base=f;
+  if(!gramTouched)$('#f-gram').value=f.g;
+  applyBase();
 }
 function toggleMeal(id){
   openMeal=openMeal===id?null:id;
@@ -555,9 +854,6 @@ function toggleMeal(id){
 }
 
 /* ---------- event ---------- */
-$('#picks').innerHTML=FOODS.map(function(f,i){
-  return '<button type="button" class="chip" data-i="'+i+'" data-n="'+esc(f.n.toLowerCase())+'">'+esc(f.n)+' <b>'+f.k+'</b></button>';
-}).join('');
 
 $('#prev').addEventListener('click',function(){sel=addDays(sel,-1);renderAll();});
 $('#next').addEventListener('click',function(){if(sel<todayKey()){sel=addDays(sel,1);renderAll();}});
@@ -595,18 +891,23 @@ $('#meals').addEventListener('click',function(ev){
 });
 
 $('#addform').addEventListener('click',function(ev){
+  var pb=ev.target.closest('[data-portion]');
+  if(pb&&base){gramTouched=false;$('#f-gram').value=base.g;applyBase();return;}
   var c=ev.target.closest('.chip');
   if(!c)return;
-  base=FOODS[Number(c.dataset.i)];
-  $('#f-name').value=base.n;
+  manual=false;
+  $('#f-name').value=FOODS[Number(c.dataset.i)].n;
   $('#f-more').open=true;
-  applyBase();
+  setBase(FOODS[Number(c.dataset.i)]);
+  markPicks();
+  showHint();
   clearErr();
-  $('#f-kcal').focus();
+  $('#f-gram').focus();
+  $('#f-gram').select();
 });
-$('#f-porsi').addEventListener('input',applyBase);
-['#f-kcal','#f-p','#f-c','#f-f'].forEach(function(s){$(s).addEventListener('input',function(){base=null;clearErr();});});
-$('#f-name').addEventListener('input',function(){filterPicks(this.value);clearErr();});
+$('#f-gram').addEventListener('input',function(){gramTouched=true;applyBase();showHint();});
+['#f-kcal','#f-p','#f-c','#f-f'].forEach(function(x){$(x).addEventListener('input',function(){manual=true;base=null;markPicks();showHint();clearErr();});});
+$('#f-name').addEventListener('input',onNameInput);
 $('#f-close').addEventListener('click',function(){toggleMeal(openMeal);});
 
 $('#addform').addEventListener('submit',function(ev){
@@ -616,9 +917,12 @@ $('#addform').addEventListener('submit',function(ev){
   var p=num($('#f-p').value), c=num($('#f-c').value), f=num($('#f-f').value);
   var k=num($('#f-kcal').value);
   if(!k)k=Math.round(p*4+c*4+f*9);
-  if(!k){showErr('Isi kalori, atau isi protein, karbo, dan lemaknya.');$('#f-kcal').focus();return;}
-  var m=porsiVal();
-  if(base&&name===base.n&&m!==1)name=name+' ×'+nf1.format(m);
+  if(!k){showErr(name?'Makanan ini belum ada di daftar. Isi kalorinya secara manual.':'Isi nama makanan atau kalorinya.');(name?$('#f-kcal'):$('#f-name')).focus();return;}
+  if(base){
+    var gr=gramVal();
+    var label=(name&&norm(name).indexOf(norm(base.n))>=0)?cap(name):base.n;
+    name=label+' · '+nf1.format(gr)+' g';
+  }
   if(!name)name='Tanpa nama';
   var list=state.days[sel]=state.days[sel]||[];
   list.push(mkEntry(openMeal,name,k,p,c,f));
